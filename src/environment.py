@@ -4,6 +4,7 @@ import time
 import socket
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import configs
 import random
 import queue
@@ -12,10 +13,10 @@ from prey import prey_process
 
 def secheresse(etat):
     chances=random.randint(1,100)
-    if chances <=33 and not etat:
+    if chances <=50 and not etat:
         etat="activée"
         print(f"La sécheresse est maintenant {etat}.")
-    elif chances>=67 and etat:
+    elif chances>=50 and etat:
         etat="désactivée"
         print(f"La sécheresse est maintenant {etat}.")
 
@@ -28,7 +29,8 @@ def croissance_herbe(memoire):
 
 def env_process(memoire,lock,msg_queue,dict_entites):
     print("Démarrage de l'environnement...")
-    compteur_secheresse=0 # pour ne changer la sécheresse que toutes les frequences_secheresse itérations
+    temps_debut = time.time()
+    compteur_iterations=0
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -41,47 +43,62 @@ def env_process(memoire,lock,msg_queue,dict_entites):
         print(f"Server en écoute sur {configs.HOST}:{configs.PORT}")
         try:
             while True:
-                compteur_secheresse+=1
-                if compteur_secheresse%configs.frequence_secheresse==0:
+                compteur_iterations+=1
+                if compteur_iterations%configs.frequence_secheresse==0:
                     secheresse(configs.sech)
                 with lock:
                     croissance_herbe(memoire)
-            try :
-                conn,addr=s.accept()
-                with conn:
-                    msg=conn.recv(1024)
-                    if msg==configs.nouveau_predateur:
-                        with lock:
-                            memoire[configs.index_pred]+=1
-                        print(f"Nouveau prédateur (Total : {memoire[configs.index_pred]})")
-                        p = multiprocessing.Process(target=pred_process, args=(memoire, lock, msg_queue, dict_entites))
-                        p.start()
-                        with lock:
-                            dict_entites[p.pid] = ('predateur',50,'actif')
-                    elif msg==configs.nouvelle_proie:
-                        with lock:
-                            memoire[configs.index_proie]+=1
-                        print(f"Nouvelle proie (Total : {memoire[configs.index_proie]})")
-                        p = multiprocessing.Process(target=prey_process, args=(memoire, lock, msg_queue, dict_entites))
-                        p.start()
-                        with lock:
-                            dict_entites[p.pid] = ('proie',30,'actif')
-
-            except BlockingIOError:
-                pass
-            except socket.timeout:
-                pass
-            except Exception as e:
-                print(f"Erreur inattendue : {e}")
-            if not msg_queue.full(): 
-                etat_acc=list(memoire)
-                msg_queue.put(etat_acc)
-            
-            time.sleep(1)
+                try :
+                    conn,addr=s.accept()
+                    with conn:
+                        msg=conn.recv(1024)
+                        if msg==configs.nouveau_predateur:
+                            with lock:
+                                memoire[configs.index_pred]+=1
+                            p = multiprocessing.Process(target=pred_process, args=(memoire, lock, msg_queue, dict_entites))
+                            p.start()
+                            with lock:
+                                dict_entites[p.pid] = ('predateur',50,'actif')
+                        elif msg==configs.nouvelle_proie:
+                            with lock:
+                                memoire[configs.index_proie]+=1
+                            p = multiprocessing.Process(target=prey_process, args=(memoire, lock, msg_queue, dict_entites))
+                            p.start()
+                            with lock:
+                                dict_entites[p.pid] = ('proie',30,'actif')
+                except BlockingIOError:
+                    pass
+                except socket.timeout:
+                    pass
+                except Exception as e:
+                    print(f"Erreur inattendue : {e}")
+                print(f"\nÉTAT: Proies={memoire[configs.index_proie]} | Prédateurs={memoire[configs.index_pred]} | Herbe={memoire[configs.index_herbe]}")
+                with lock:
+                    if compteur_iterations > 10 and memoire[configs.index_proie] == 0 and memoire[configs.index_pred] == 0:
+                        duree = time.time() - temps_debut
+                        print("\nExtinction totale - Aucune entité restante")
+                        print(f"Durée de la simulation : {duree}s")
+                        print("Arrêt de la simulation...")
+                        break
+                
+                if not msg_queue.full(): 
+                    etat_acc=list(memoire)
+                    msg_queue.put(etat_acc)
+                time.sleep(1)
         except KeyboardInterrupt:
-            print("Arrêt de l'environnement")
+            duree = time.time() - temps_debut
+            print("\nArrêt de l'environnement")
+            print(f"Durée de la simulation : {duree}s")
 
-
+if __name__ == "__main__":
+    manager = multiprocessing.Manager()
+    memoire = manager.list([0, 0, 50])  # proies, prédateurs, herbe
+    lock = manager.Lock()
+    msg_queue = manager.Queue(maxsize=10)
+    dict_entites = manager.dict()
+    env_proc = multiprocessing.Process(target=env_process, args=(memoire, lock, msg_queue, dict_entites))
+    env_proc.start()
+    env_proc.join()
 
 
                 
