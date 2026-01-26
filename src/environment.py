@@ -44,7 +44,6 @@ def env_process(memoire,lock,msg_queue,dict_entites):
     temps_debut = time.time()
     compteur_iterations=0
     
-    # Démarrer le timer de sécheresse (compatible Windows avec threading.Timer)
     timer_secheresse = threading.Timer(configs.frequence_secheresse, secheresse)
     timer_secheresse.daemon = True
     timer_secheresse.start()
@@ -115,3 +114,4 @@ if __name__ == "__main__":
 
 
                 
+
