@@ -55,6 +55,16 @@ def pred_process(memoire,lock,msg_queue,dict_entites):
         if etat == 'actif' and energie <= configs.seuil_faim:
             energie, mange = manger_proie(energie, memoire, lock, dict_entites, id, msg_queue)
             if mange:
+                if energie >= configs.seuil_reproduction_predateur:
+                    success, energie = reproduction_predateur(energie)
+                    if success:
+                        msg_queue.put(f"Prédateur {id} se reproduit")
+                        try:
+                            with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as s:
+                                s.connect((configs.HOST,configs.PORT))
+                                s.sendall(configs.nouveau_predateur)
+                        except (ConnectionRefusedError, OSError) as e:
+                            pass
                 etat = 'passif'
         elif etat == 'actif' and energie >= configs.seuil_reproduction_predateur:
             success, energie = reproduction_predateur(energie)
