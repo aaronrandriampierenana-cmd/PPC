@@ -170,3 +170,8 @@ class Display:
                 
 if __name__ == "__main__":
     Display().fenetre.mainloop()
+    try:
+        Display().fenetre.mainloop()
+    finally: #ca permet d'executer ce bout de code quoi qu'il se passe
+        print("Nettoyage final des processus...")
+        Display().reset_simulation()
