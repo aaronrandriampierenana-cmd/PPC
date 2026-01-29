@@ -47,6 +47,16 @@ def prey_process(memoire,lock,msg_queue,dict_entites):
         if etat == 'actif' and energie <= configs.seuil_faim:
             energie, mange = manger_herbe(energie, memoire, lock)
             if mange:
+                if energie >= configs.seuil_reproduction_proie:
+                    success, energie = reproduction_proie(energie)
+                    if success:
+                        msg_queue.put(f"Proie {id} se reproduit")
+                        try:
+                            with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as s:
+                                s.connect((configs.HOST,configs.PORT))
+                                s.sendall(configs.nouvelle_proie)
+                        except (ConnectionRefusedError, OSError) as e:
+                            pass
                 etat = 'passif'
         elif etat == 'actif' and energie >= configs.seuil_reproduction_proie:
             success, energie = reproduction_proie(energie)
