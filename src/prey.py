@@ -4,10 +4,7 @@ import time
 import os
 import socket
 import random
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import configs
-
 
 def manger_herbe(energie, memoire, lock):
     mange = False
@@ -16,54 +13,63 @@ def manger_herbe(energie, memoire, lock):
             memoire[configs.index_herbe] -= configs.qte_herbe_mangee
             energie += configs.gain_repas
             mange = True
-    return energie, mange
+    return min(energie, configs.energie_max), mange
 
-def reproduction_proie(energie):
-    if energie >= configs.seuil_reproduction_proie:
-        energie //= configs.facteur_reproduction
-        return True, energie
-    return False, energie
-
-
-def prey_process(memoire,lock,msg_queue,dict_entites):
-    time.sleep(random.uniform(0, 0.5))# pour desynchroniser les proies sinon elles meurent toutes en meme temps
+def prey_process(memoire, lock, msg_queue, dict_entites):
+    time.sleep(random.uniform(0, 0.5))
+    id = os.getpid()
+    # Initialisation de la position
+    x, y = random.randint(0, configs.GRID_SIZE-1), random.randint(0, configs.GRID_SIZE-1)
     
-    id=os.getpid()
     with lock:
-        if id not in dict_entites:
-            dict_entites[id] = ('proie', configs.energie_depart_proie, 'passif')
-            memoire[configs.index_proie] += 1
-        nature, energie, etat = dict_entites[id]    
+        dict_entites[id] = {'type': 'proie', 'energie': configs.energie_depart_proie, 'x': x, 'y': y, 'etat': 'passif'}
+        memoire[configs.index_proie] += 1
+
     while True:
         with lock:
-            if id in dict_entites:
-                nature, energie, etat = dict_entites[id]
-            else:
+            if id not in dict_entites:
                 break
-        if energie <= 0:
-            break
-        if energie <= configs.seuil_faim or energie >= configs.seuil_reproduction_proie:
-            etat = 'actif'
-        if etat == 'actif' and energie <= configs.seuil_faim:
-            energie, mange = manger_herbe(energie, memoire, lock)
-            if mange:
-                etat = 'passif'
-        elif etat == 'actif' and energie >= configs.seuil_reproduction_proie:
-            success, energie = reproduction_proie(energie)
-            if success:
-                msg_queue.put(f"Proie {id} se reproduit")
-                etat = 'passif'
-                try:
-                    with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as s:
-                        s.connect((configs.HOST,configs.PORT))
-                        s.sendall(configs.nouvelle_proie)
-                except (ConnectionRefusedError, OSError) as e:
-                    pass
+            energie = dict_entites[id]['energie']
+            if energie <= 0:
+                break
+
+        # Déplacement
+        x = x + random.choice([-1, 0, 1])
+        y = y + random.choice([-1, 0, 1])
+
+        # Empêcher la sortie de la carte
+        x = max(0, min(configs.GRID_SIZE - 1, x))
+        y = max(0, min(configs.GRID_SIZE - 1, y))
         
+        # Logique d'état: actif si faim ou prêt à se reproduire
+        a_faim = energie <= configs.seuil_faim
+        peut_se_reproduire = energie >= configs.seuil_reproduction_proie
+        etat = 'actif' if (a_faim or peut_se_reproduire) else 'passif'
+
+        # Logique de faim/reproduction
+        mange = False
+
+        if a_faim:
+            energie, mange = manger_herbe(energie, memoire, lock)
+        
+        elif peut_se_reproduire:
+            energie //= configs.facteur_reproduction
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((configs.HOST, configs.PORT)); s.sendall(configs.nouvelle_proie)
+            except: pass
+
         energie -= configs.cout_vie
-        dict_entites[id] = (nature, energie, etat)
-        time.sleep(1)
+        with lock:
+            if id not in dict_entites:
+                break
+            dict_entites[id] = {'type': 'proie', 'energie': energie, 'x': x, 'y': y, 'etat': etat}
+        time.sleep(0.2) # Plus rapide pour la fluidité visuelle
+
+        if energie <= 0:
+            break # On tue le processus
+
     with lock:
-        memoire[configs.index_proie]-=1
-        del dict_entites[id]
-    msg_queue.put(f"Proie {id} est morte")
+        if id in dict_entites:
+            del dict_entites[id]
+            memoire[configs.index_proie] -= 1
