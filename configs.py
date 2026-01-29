@@ -10,7 +10,7 @@ seuil_reproduction_proie=55
 seuil_reproduction_predateur=65
 energie_max=100
 gain_repas=25
-cout_vie=1
+cout_vie=0.5
 facteur_reproduction=2
 qte_herbe_mangee=4
 
@@ -22,3 +22,4 @@ nouveau_predateur=b"NOUVEAU_PREDATEUR"
 
 sech=False
 frequence_secheresse=30
+GRID_SIZE = 100
