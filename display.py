@@ -214,8 +214,15 @@ class Display:
         if self.env_process and self.env_process.is_alive():
             self.env_process.terminate()
             self.env_process.join()
+            if self.env_process.is_alive():
+                os.kill(self.env_process.pid, 9) # Kill forcé si nécessaire
         
-        self.manager = None
+        if self.manager:
+            try:
+                self.manager.shutdown()
+            except: pass
+            self.manager = None
+        
         self.memoire = None
         self.lock = None
         self.msg_queue = None
@@ -270,7 +277,10 @@ class Display:
         self.fenetre.mainloop()
 
 if __name__ == "__main__":
-    display = Display()
-    display.run()
+    try:
+        Display().run()
+    finally: #ca permet d'executer ce bout de code quoi qu'il se passe
+        print("Nettoyage final des processus...")
+        Display().reset_simulation()
 
 
