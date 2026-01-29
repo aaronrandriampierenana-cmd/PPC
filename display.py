@@ -62,19 +62,21 @@ class Display:
         if self.env_process and self.env_process.is_alive():
             self.env_process.terminate()
             self.env_process.join()
+            if self.env_process.is_alive():
+                os.kill(self.env_process.pid, 9) # Kill forcé si nécessaire
             self.env_process = None
-
-        # 2. Vider le dictionnaire partagé et la mémoire
-        # On utilise un bloc try/except car si le manager est fermé, cela peut crash
-        if self.dict_entites is not None:
+            
+        # 2. Fermer le Manager (libère les ressources IPC)
+        if self.manager:
             try:
-                with self.lock:
-                    self.dict_entites.clear()
-                    self.memoire[0] = 0 # Reset Nb Proies
-                    self.memoire[1] = 0 # Reset Nb Preds
-                    self.memoire[2] = 50.0 # Reset Herbe
-            except Exception as e:
-                print(f"Erreur lors du nettoyage des données : {e}")
+                self.manager.shutdown()
+            except: pass
+            self.manager = None
+
+        # 3. Réinitialiser les pointeurs
+        self.dict_entites = None
+        self.memoire = None
+        self.lock = None
 
         # 3. Nettoyer le Canvas (Supprimer tous les ronds)
         self.canvas.delete("all")
